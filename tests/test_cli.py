@@ -59,7 +59,9 @@ class TestImportKeysCommand(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "source"
             source.mkdir()
-            with mock.patch.object(cli, "OWNED_BEACONS_DIR", source):
+            dest = Path(tmp) / "keys"
+            with mock.patch.object(cli, "OWNED_BEACONS_DIR", source), \
+                    mock.patch.object(cli, "KEYS_DIR", dest):
                 result = runner.invoke(cli.main, ["import-keys"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("No AirTags found", result.output)

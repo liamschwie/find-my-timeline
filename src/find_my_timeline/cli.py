@@ -53,7 +53,7 @@ def import_keys_cmd():
         click.echo("Make sure Find My is set up on this Mac with at least one AirTag.", err=True)
         sys.exit(1)
 
-    written = export_keys(source_dir=OWNED_BEACONS_DIR)
+    written = export_keys(source_dir=OWNED_BEACONS_DIR, dest_dir=KEYS_DIR)
     if not written:
         click.echo("No AirTags found to export.")
         return
