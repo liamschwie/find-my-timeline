@@ -517,7 +517,7 @@
 
                         marker.bindPopup(`
                             <div class="popup-content">
-                                <h3>${getDeviceIcon()} ${loc.device_id}</h3>
+                                <h3>${getDeviceIcon()} ${loc.device_name || loc.device_id}</h3>
                                 <p><strong>Time:</strong> ${formatDate(loc.timestamp)}</p>
                                 <p><strong>Confidence:</strong> ${loc.confidence != null ? loc.confidence + '/3' : 'Unknown'}</p>
                                 <p><strong>Accuracy:</strong> ${loc.horizontal_accuracy ? loc.horizontal_accuracy.toFixed(0) + 'm' : 'Unknown'}</p>

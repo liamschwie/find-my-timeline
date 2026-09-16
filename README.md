@@ -46,11 +46,34 @@ python3 -m venv .venv
 
 By default the map opens at `http://127.0.0.1:5000`.
 
+### Getting the keys on macOS 15 and later
+
+`import-keys` reads the AirTag keys out of this Mac's local Find My cache,
+which requires the `BeaconStore` key from the keychain. macOS 15 (Sequoia)
+moved that key behind the `com.apple.icloud.searchpartyuseragent` access
+group, so only Apple-signed binaries can read it — and on macOS 26 the
+SIP-disabling workaround no longer helps either. On those versions
+`import-keys` cannot succeed, and says so.
+
+Export the keys somewhere that still allows it — a Mac on macOS 14 or
+earlier, or a tool such as
+[OpenTagViewer](https://github.com/parawanderer/OpenTagViewer) — and
+import the files here:
+
+```bash
+.venv/bin/find-my-timeline import-keys --from ~/Downloads/airtag-keys
+```
+
+It accepts findmy `.json` key files or decrypted `.plist` files, either a
+single file or a directory of them. Still-encrypted `.record` files are
+rejected with an explicit error rather than a crash. The keys are
+long-lived: once imported, the rest of the tool runs on any machine.
+
 ## Commands
 
 | Command | Description |
 |---|---|
-| `find-my-timeline import-keys` | One-time: export AirTag keys from this Mac |
+| `find-my-timeline import-keys [--from PATH]` | One-time: export AirTag keys from this Mac, or import keys exported elsewhere |
 | `find-my-timeline auth` | Log into Apple ID (2FA supported) |
 | `find-my-timeline poll` | Run the polling loop only |
 | `find-my-timeline web [--open/--no-open]` | Serve the map only |

@@ -121,6 +121,10 @@ class LocationDatabase:
             ).fetchall()
             return [dict(row) for row in rows]
 
+    # ponytail: timestamps are stored as local-time strings with their UTC
+    # offset, and filtered by string comparison, so a history spanning two
+    # timezones orders by wall clock rather than by instant. Store UTC and
+    # convert on read if that ever matters.
     def get_locations(
         self,
         device_id: str | None = None,
@@ -129,7 +133,10 @@ class LocationDatabase:
         limit: int | None = None,
     ) -> list[dict]:
         """Get location history with optional filters."""
-        query = "SELECT * FROM locations WHERE 1=1"
+        query = (
+            "SELECT locations.*, devices.name AS device_name FROM locations "
+            "LEFT JOIN devices ON devices.id = locations.device_id WHERE 1=1"
+        )
         params: list = []
 
         if device_id:

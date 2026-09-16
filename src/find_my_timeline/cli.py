@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from .auth import AuthenticationError, login, load_session
 from .database import LocationDatabase
-from .keys import KEYS_DIR, OWNED_BEACONS_DIR, export_keys, load_keys
+from .keys import KEYS_DIR, SEARCH_PATHS, export_keys, find_search_path, import_from, load_keys
 from .poller import AccessoryPoller
 from .web import create_app
 
@@ -40,20 +40,49 @@ def get_config() -> dict:
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(package_name="find-my-timeline")
 def main():
     """AirTag Timeline - track AirTag location and battery history."""
 
 
+KEY_ACCESS_HELP = """
+macOS 15 and later restrict the BeaconStore keychain key -- which decrypts
+the local Find My records -- to Apple-signed binaries, so this Mac cannot
+export its own AirTag keys.
+
+Export them on a Mac running macOS 14 or earlier, or with a tool such as
+OpenTagViewer, then import the files here:
+
+    find-my-timeline import-keys --from /path/to/exported/keys
+"""
+
+
 @main.command("import-keys")
-def import_keys_cmd():
+@click.option(
+    "--from",
+    "source",
+    type=click.Path(exists=True, path_type=Path),
+    help="Import keys exported elsewhere (.json or decrypted .plist file, or a directory of them)",
+)
+def import_keys_cmd(source):
     """Export AirTag private keys from this Mac's local Find My cache (one-time)."""
-    if not OWNED_BEACONS_DIR.exists():
-        click.echo(f"No Find My accessory data found at {OWNED_BEACONS_DIR}", err=True)
-        click.echo("Make sure Find My is set up on this Mac with at least one AirTag.", err=True)
+    try:
+        if source:
+            written = import_from(source, dest_dir=KEYS_DIR)
+        else:
+            search_path = find_search_path()
+            if search_path is None:
+                click.echo("No Find My accessory records found on this Mac.", err=True)
+                click.echo(f"Looked in: {', '.join(str(p) for p in SEARCH_PATHS)}", err=True)
+                click.echo("Make sure Find My is set up here with at least one AirTag.", err=True)
+                sys.exit(1)
+            written = export_keys(search_path=search_path, dest_dir=KEYS_DIR)
+    except Exception as e:
+        click.echo(f"Could not read the accessory keys: {e or type(e).__name__}", err=True)
+        if not source:
+            click.echo(KEY_ACCESS_HELP, err=True)
         sys.exit(1)
 
-    written = export_keys(source_dir=OWNED_BEACONS_DIR, dest_dir=KEYS_DIR)
     if not written:
         click.echo("No AirTags found to export.")
         return

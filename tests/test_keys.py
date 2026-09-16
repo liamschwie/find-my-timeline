@@ -10,40 +10,30 @@ class FakeAccessory:
     def __init__(self, name):
         self.name = name
         self.identifier = f"id-{name}"
-        self.written_to = None
 
     def to_json(self, path):
-        self.written_to = Path(path)
         Path(path).write_text("{}")
 
 
 class TestExportKeys(unittest.TestCase):
     def setUp(self):
-        self.src = tempfile.TemporaryDirectory()
-        self.dst = tempfile.TemporaryDirectory()
-        self.src_path = Path(self.src.name)
-        self.dst_path = Path(self.dst.name) / "keys"
+        self.tmp = tempfile.TemporaryDirectory()
+        self.src_path = Path(self.tmp.name) / "Storage"
+        self.src_path.mkdir()
+        self.dst_path = Path(self.tmp.name) / "keys"
 
     def tearDown(self):
-        self.src.cleanup()
-        self.dst.cleanup()
+        self.tmp.cleanup()
 
-    def test_no_records_returns_empty(self):
-        result = keys.export_keys(self.src_path, self.dst_path)
-        self.assertEqual(result, [])
+    def test_no_search_path_returns_empty(self):
+        with mock.patch.object(keys, "find_search_path", return_value=None):
+            self.assertEqual(keys.export_keys(dest_dir=self.dst_path), [])
 
-    def test_missing_source_dir_returns_empty(self):
-        result = keys.export_keys(self.src_path / "nope", self.dst_path)
-        self.assertEqual(result, [])
-
-    def test_exports_each_record(self):
-        (self.src_path / "A.record").write_bytes(b"fake plist")
-        (self.src_path / "B.record").write_bytes(b"fake plist")
-
+    def test_exports_each_accessory(self):
         with mock.patch.object(
-            keys.FindMyAccessory,
-            "from_plist",
-            side_effect=[FakeAccessory("Backpack"), FakeAccessory("Keys")],
+            keys,
+            "list_accessories",
+            return_value=[FakeAccessory("Backpack"), FakeAccessory("Keys")],
         ):
             written = keys.export_keys(self.src_path, self.dst_path)
 
@@ -53,12 +43,8 @@ class TestExportKeys(unittest.TestCase):
             self.assertEqual(path.suffix, ".json")
 
     def test_sanitizes_unsafe_characters_in_name(self):
-        (self.src_path / "A.record").write_bytes(b"fake plist")
-
         with mock.patch.object(
-            keys.FindMyAccessory,
-            "from_plist",
-            return_value=FakeAccessory("My/AirTag: 1"),
+            keys, "list_accessories", return_value=[FakeAccessory("My/AirTag: 1")]
         ):
             written = keys.export_keys(self.src_path, self.dst_path)
 
@@ -66,45 +52,123 @@ class TestExportKeys(unittest.TestCase):
         self.assertNotIn("/", written[0].name)
         self.assertNotIn(":", written[0].name)
 
-    def test_export_keys_sets_0600_permission(self):
-        (self.src_path / "A.record").write_bytes(b"fake plist")
+    def test_falls_back_to_identifier_when_unnamed(self):
+        unnamed = FakeAccessory("Backpack")
+        unnamed.name = None
 
+        with mock.patch.object(keys, "list_accessories", return_value=[unnamed]):
+            written = keys.export_keys(self.src_path, self.dst_path)
+
+        self.assertEqual(written[0].stem, "id-Backpack")
+
+    def test_export_keys_sets_restrictive_permissions(self):
         with mock.patch.object(
-            keys.FindMyAccessory,
-            "from_plist",
-            return_value=FakeAccessory("Backpack"),
+            keys, "list_accessories", return_value=[FakeAccessory("Backpack")]
         ):
             written = keys.export_keys(self.src_path, self.dst_path)
 
-        self.assertEqual(len(written), 1)
-        perms = oct(written[0].stat().st_mode)[-3:]
-        self.assertEqual(perms, "600")
+        self.assertEqual(oct(written[0].stat().st_mode)[-3:], "600")
+        self.assertEqual(oct(self.dst_path.stat().st_mode)[-3:], "700")
 
-    def test_load_keys_empty_directory(self):
-        result = keys.load_keys(self.dst_path)
-        self.assertEqual(result, [])
 
-    def test_load_keys_round_trip(self):
-        (self.src_path / "A.record").write_bytes(b"fake plist")
-        (self.src_path / "B.record").write_bytes(b"fake plist")
+class TestFindSearchPath(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
 
-        with mock.patch.object(
-            keys.FindMyAccessory,
-            "from_plist",
-            side_effect=[FakeAccessory("Backpack"), FakeAccessory("Keys")],
-        ):
-            written = keys.export_keys(self.src_path, self.dst_path)
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_returns_none_when_no_records_anywhere(self):
+        empty = self.root / "empty"
+        (empty / "OwnedBeacons").mkdir(parents=True)
+        self.assertIsNone(keys.find_search_path([self.root / "missing", empty]))
+
+    def test_returns_first_path_holding_records(self):
+        populated = self.root / "populated"
+        (populated / "OwnedBeacons").mkdir(parents=True)
+        (populated / "OwnedBeacons" / "A.record").write_bytes(b"x")
+
+        found = keys.find_search_path([self.root / "missing", populated])
+        self.assertEqual(found, populated)
+
+
+class TestImportFrom(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.dst_path = self.root / "keys"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_imports_json_files_from_directory(self):
+        source = self.root / "exported"
+        source.mkdir()
+        (source / "a.json").write_text("{}")
+        (source / "b.json").write_text("{}")
+        (source / "notes.txt").write_text("ignored")
 
         with mock.patch.object(
             keys.FindMyAccessory,
             "from_json",
             side_effect=[FakeAccessory("Backpack"), FakeAccessory("Keys")],
         ):
-            loaded = keys.load_keys(self.dst_path)
+            written = keys.import_from(source, self.dst_path)
 
-        self.assertEqual(len(loaded), 2)
-        self.assertEqual(loaded[0].name, "Backpack")
-        self.assertEqual(loaded[1].name, "Keys")
+        self.assertEqual([p.stem for p in written], ["Backpack", "Keys"])
+
+    def test_imports_single_decrypted_plist(self):
+        source = self.root / "tag.plist"
+        source.write_bytes(b"plist")
+
+        with mock.patch.object(
+            keys.FindMyAccessory, "from_plist", return_value=FakeAccessory("Backpack")
+        ):
+            written = keys.import_from(source, self.dst_path)
+
+        self.assertEqual(len(written), 1)
+
+    def test_still_encrypted_record_raises_actionable_error(self):
+        source = self.root / "tag.record"
+        source.write_bytes(b"encrypted")
+
+        with mock.patch.object(
+            keys.FindMyAccessory, "from_plist", side_effect=TypeError("list indices")
+        ):
+            with self.assertRaises(ValueError) as ctx:
+                keys.import_from(source, self.dst_path)
+
+        self.assertIn("still encrypted", str(ctx.exception))
+
+
+class TestLoadKeys(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.keys_dir = Path(self.tmp.name) / "keys"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_load_keys_missing_directory(self):
+        self.assertEqual(keys.load_keys(self.keys_dir), [])
+
+    def test_load_keys_round_trip(self):
+        with mock.patch.object(
+            keys,
+            "list_accessories",
+            return_value=[FakeAccessory("Backpack"), FakeAccessory("Keys")],
+        ):
+            keys.export_keys(Path(self.tmp.name), self.keys_dir)
+
+        with mock.patch.object(
+            keys.FindMyAccessory,
+            "from_json",
+            side_effect=[FakeAccessory("Backpack"), FakeAccessory("Keys")],
+        ):
+            loaded = keys.load_keys(self.keys_dir)
+
+        self.assertEqual([a.name for a in loaded], ["Backpack", "Keys"])
 
 
 if __name__ == "__main__":

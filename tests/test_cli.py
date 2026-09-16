@@ -45,26 +45,42 @@ class TestStatsAndDevicesCommands(unittest.TestCase):
 
 
 class TestImportKeysCommand(unittest.TestCase):
-    def test_missing_owned_beacons_dir_exits_nonzero(self):
+    def test_no_records_on_this_mac_exits_nonzero(self):
+        runner = CliRunner()
+        with mock.patch.object(cli, "find_search_path", return_value=None):
+            result = runner.invoke(cli.main, ["import-keys"])
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("No Find My accessory records found", result.output)
+
+    def test_locked_keychain_key_explains_the_workaround(self):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            missing = Path(tmp) / "does-not-exist"
-            with mock.patch.object(cli, "OWNED_BEACONS_DIR", missing):
+            with mock.patch.object(cli, "find_search_path", return_value=Path(tmp)), \
+                    mock.patch.object(cli, "export_keys", side_effect=ValueError("no key")):
                 result = runner.invoke(cli.main, ["import-keys"])
         self.assertEqual(result.exit_code, 1)
-        self.assertIn("No Find My accessory data found", result.output)
+        self.assertIn("import-keys --from", result.output)
 
     def test_no_keys_found_reports_zero(self):
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as tmp:
-            source = Path(tmp) / "source"
-            source.mkdir()
-            dest = Path(tmp) / "keys"
-            with mock.patch.object(cli, "OWNED_BEACONS_DIR", source), \
-                    mock.patch.object(cli, "KEYS_DIR", dest):
+            with mock.patch.object(cli, "find_search_path", return_value=Path(tmp)), \
+                    mock.patch.object(cli, "export_keys", return_value=[]):
                 result = runner.invoke(cli.main, ["import-keys"])
         self.assertEqual(result.exit_code, 0)
         self.assertIn("No AirTags found", result.output)
+
+    def test_import_from_writes_keys(self):
+        runner = CliRunner()
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "exported"
+            source.mkdir()
+            written = [Path(tmp) / "keys" / "Backpack.json"]
+            with mock.patch.object(cli, "import_from", return_value=written) as imported:
+                result = runner.invoke(cli.main, ["import-keys", "--from", str(source)])
+        self.assertEqual(result.exit_code, 0)
+        self.assertIn("Backpack", result.output)
+        self.assertEqual(imported.call_args.args[0], source)
 
 
 if __name__ == "__main__":
