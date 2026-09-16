@@ -4,6 +4,7 @@ from pathlib import Path
 
 from findmy import (
     AppleAccount,
+    InvalidCredentialsError,
     LocalAnisetteProvider,
     LoginState,
     SmsSecondFactorMethod,
@@ -48,7 +49,11 @@ def login(username: str, password: str) -> AppleAccount:
     anisette = LocalAnisetteProvider(libs_path=str(ANISETTE_LIBS_PATH))
     account = AppleAccount(anisette)
 
-    state = account.login(username, password)
+    try:
+        state = account.login(username, password)
+    except InvalidCredentialsError as exc:
+        raise AuthenticationError(f"Login failed: {exc}") from exc
+
     if state == LoginState.REQUIRE_2FA:
         _handle_2fa(account)
 
