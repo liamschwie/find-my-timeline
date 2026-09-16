@@ -1,0 +1,28 @@
+[project]
+name = "find-my-timeline"
+version = "0.1.0"
+description = "Track AirTag location and battery history from Apple Find My"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "findmy>=0.10.0",
+    "click>=8.0.0",
+    "flask>=3.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+find-my-timeline = "find_my_timeline.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/find_my_timeline"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src"]

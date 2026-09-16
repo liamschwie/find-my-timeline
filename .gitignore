@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+data/
+*.db
+.env
+account.json
+ani_libs.bin
