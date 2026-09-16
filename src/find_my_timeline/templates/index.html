@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AirTag Timeline</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 320px;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h1::before {
+            content: "🏷️";
+        }
+
+        .section {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 15px;
+        }
+
+        .section h2 {
+            font-size: 0.9rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+
+        .device {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #1a1a2e;
+            border-radius: 6px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .device:hover {
+            background: #0f3460;
+        }
+
+        .device.active {
+            background: #0f3460;
+            border-left: 3px solid #00d9ff;
+        }
+
+        .device-icon {
+            font-size: 1.5rem;
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .device-meta {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .battery {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 0.8rem;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        label {
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background: #1a1a2e;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            background: #00d9ff;
+            color: #000;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #00b8d9;
+        }
+
+        .stats {
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .stats span {
+            color: #00d9ff;
+            font-weight: 500;
+        }
+
+        #map {
+            flex: 1;
+            height: 100%;
+        }
+
+        .leaflet-popup-content-wrapper {
+            background: #1a1a2e;
+            color: #fff;
+            border-radius: 8px;
+        }
+
+        .leaflet-popup-tip {
+            background: #1a1a2e;
+        }
+
+        .popup-content {
+            padding: 5px;
+        }
+
+        .popup-content h3 {
+            margin-bottom: 8px;
+            font-size: 1rem;
+        }
+
+        .popup-content p {
+            margin: 4px 0;
+            font-size: 0.85rem;
+            color: #aaa;
+        }
+
+        .timeline-marker {
+            background: #00d9ff;
+            border: 2px solid #fff;
+            border-radius: 50%;
+        }
+
+        .current-marker {
+            background: #00ff88;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+        }
+
+        #timeline-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 350px;
+            max-height: calc(100vh - 40px);
+            background: #1a1a2e;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            display: none;
+            flex-direction: column;
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        #timeline-panel.visible {
+            display: flex;
+        }
+
+        .timeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        .timeline-header h2 {
+            font-size: 1rem;
+            color: #fff;
+            margin: 0;
+        }
+
+        #timeline-close {
+            background: transparent;
+            border: none;
+            color: #888;
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0 5px;
+            line-height: 1;
+        }
+
+        #timeline-close:hover {
+            color: #fff;
+        }
+
+        .timeline-summary {
+            padding: 12px 20px;
+            background: #16213e;
+            font-size: 0.85rem;
+            color: #aaa;
+            border-bottom: 1px solid #333;
+        }
+
+        .timeline-summary span {
+            color: #00d9ff;
+            font-weight: 500;
+        }
+
+        .timeline-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .timeline-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 4px;
+        }
+
+        .timeline-item:hover {
+            background: #16213e;
+        }
+
+        .timeline-item.active {
+            background: #0f3460;
+            border-left: 3px solid #00d9ff;
+        }
+
+        .timeline-item.latest {
+            border-left: 3px solid #00ff88;
+        }
+
+        .timeline-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #00d9ff;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+
+        .timeline-item.latest .timeline-dot {
+            background: #00ff88;
+            box-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+        }
+
+        .timeline-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .timeline-time {
+            font-size: 0.9rem;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .timeline-details {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
+        .timeline-details span {
+            margin-right: 10px;
+        }
+
+        .timeline-battery {
+            font-size: 0.8rem;
+            color: #888;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h1>AirTag Timeline</h1>
+
+        <div class="section">
+            <h2>Devices</h2>
+            <div id="devices-list">
+                <p style="color: #666; font-size: 0.9rem;">Loading devices...</p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Time Range</h2>
+            <div class="controls">
+                <div>
+                    <label for="time-range">Quick Select</label>
+                    <select id="time-range">
+                        <option value="1">Last 1 hour</option>
+                        <option value="6">Last 6 hours</option>
+                        <option value="24" selected>Last 24 hours</option>
+                        <option value="168">Last 7 days</option>
+                        <option value="720">Last 30 days</option>
+                        <option value="0">All time</option>
+                    </select>
+                </div>
+                <button id="refresh-btn">Refresh Map</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Statistics</h2>
+            <div id="stats" class="stats">
+                Loading...
+            </div>
+        </div>
+    </div>
+
+    <div id="map"></div>
+
+    <div id="timeline-panel">
+        <div class="timeline-header">
+            <h2><span id="timeline-device-name">Device Timeline</span></h2>
+            <button id="timeline-close">&times;</button>
+        </div>
+        <div class="timeline-summary" id="timeline-summary"></div>
+        <div class="timeline-list" id="timeline-list"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([37.7749, -122.4194], 12);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        let markers = [];
+        let markersById = {};
+        let polylines = [];
+        let selectedDevice = null;
+        let selectedLocationId = null;
+        let currentLocations = [];
+
+        const deviceIcons = {
+            'default': '🏷️'
+        };
+
+        function getDeviceIcon() {
+            return deviceIcons.default;
+        }
+
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            return date.toLocaleString();
+        }
+
+        function formatBattery(status) {
+            if (!status) return '';
+            const icons = { 'Full': '🔋', 'Medium': '🔋', 'Low': '🪫', 'Very Low': '🔴' };
+            const icon = icons[status] || '🔋';
+            return `${icon} ${status}`;
+        }
+
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/devices');
+                const devices = await response.json();
+
+                const container = document.getElementById('devices-list');
+
+                if (devices.length === 0) {
+                    container.innerHTML = '<p style="color: #666;">No devices found. Start the poller to begin tracking.</p>';
+                    return;
+                }
+
+                container.innerHTML = devices.map(device => `
+                    <div class="device ${selectedDevice === device.id ? 'active' : ''}"
+                         data-id="${device.id}">
+                        <span class="device-icon">${getDeviceIcon()}</span>
+                        <div class="device-info">
+                            <div class="device-name">${device.name}</div>
+                            <div class="device-meta">${device.device_display_name || ''}</div>
+                        </div>
+                    </div>
+                `).join('');
+
+                container.querySelectorAll('.device').forEach(el => {
+                    el.addEventListener('click', () => {
+                        const id = el.dataset.id;
+                        if (selectedDevice === id) {
+                            selectedDevice = null;
+                            hideTimelinePanel();
+                        } else {
+                            selectedDevice = id;
+                        }
+                        selectedLocationId = null;
+                        loadDevices();
+                        loadLocations();
+                        loadStats();
+                    });
+                });
+            } catch (error) {
+                console.error('Failed to load devices:', error);
+            }
+        }
+
+        async function loadLocations() {
+            markers.forEach(m => map.removeLayer(m));
+            polylines.forEach(p => map.removeLayer(p));
+            markers = [];
+            markersById = {};
+            polylines = [];
+            currentLocations = [];
+
+            const hours = document.getElementById('time-range').value;
+            let url = '/api/locations?limit=5000';
+
+            if (hours !== '0') {
+                url += `&hours=${hours}`;
+            }
+
+            if (selectedDevice) {
+                url += `&device_id=${encodeURIComponent(selectedDevice)}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                const locations = await response.json();
+
+                if (locations.length === 0) {
+                    hideTimelinePanel();
+                    return;
+                }
+
+                const byDevice = {};
+                locations.forEach(loc => {
+                    if (!byDevice[loc.device_id]) {
+                        byDevice[loc.device_id] = [];
+                    }
+                    byDevice[loc.device_id].push(loc);
+                });
+
+                const colors = ['#00d9ff', '#ff6b6b', '#4ecdc4', '#ffe66d', '#95e1d3'];
+                let colorIndex = 0;
+                const bounds = [];
+
+                for (const [, deviceLocations] of Object.entries(byDevice)) {
+                    const color = colors[colorIndex % colors.length];
+                    colorIndex++;
+
+                    deviceLocations.sort((a, b) =>
+                        new Date(a.timestamp) - new Date(b.timestamp)
+                    );
+
+                    const path = deviceLocations.map(loc => [loc.latitude, loc.longitude]);
+                    if (path.length > 1) {
+                        const polyline = L.polyline(path, {
+                            color: color,
+                            weight: 3,
+                            opacity: 0.7
+                        }).addTo(map);
+                        polylines.push(polyline);
+                    }
+
+                    deviceLocations.forEach((loc, index) => {
+                        const isLatest = index === deviceLocations.length - 1;
+                        const marker = L.circleMarker([loc.latitude, loc.longitude], {
+                            radius: isLatest ? 10 : 6,
+                            fillColor: isLatest ? '#00ff88' : color,
+                            color: '#fff',
+                            weight: isLatest ? 3 : 2,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        }).addTo(map);
+
+                        marker.bindPopup(`
+                            <div class="popup-content">
+                                <h3>${getDeviceIcon()} ${loc.device_id}</h3>
+                                <p><strong>Time:</strong> ${formatDate(loc.timestamp)}</p>
+                                <p><strong>Confidence:</strong> ${loc.confidence != null ? loc.confidence + '/3' : 'Unknown'}</p>
+                                <p><strong>Accuracy:</strong> ${loc.horizontal_accuracy ? loc.horizontal_accuracy.toFixed(0) + 'm' : 'Unknown'}</p>
+                                ${loc.battery_status ? `<p><strong>Battery:</strong> ${formatBattery(loc.battery_status)}</p>` : ''}
+                            </div>
+                        `);
+
+                        markers.push(marker);
+                        markersById[loc.id] = marker;
+                        bounds.push([loc.latitude, loc.longitude]);
+                    });
+
+                    if (selectedDevice) {
+                        currentLocations = deviceLocations;
+                    }
+                }
+
+                if (bounds.length > 0) {
+                    map.fitBounds(bounds, { padding: [50, 50] });
+                }
+
+                if (selectedDevice && currentLocations.length > 0) {
+                    updateTimelinePanel();
+                } else {
+                    hideTimelinePanel();
+                }
+
+            } catch (error) {
+                console.error('Failed to load locations:', error);
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const stats = await response.json();
+
+                document.getElementById('stats').innerHTML = `
+                    <p><span>${stats.total_devices}</span> devices tracked</p>
+                    <p><span>${stats.total_locations.toLocaleString()}</span> locations recorded</p>
+                `;
+
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        function updateTimelinePanel() {
+            const panel = document.getElementById('timeline-panel');
+            const deviceName = document.getElementById('timeline-device-name');
+            const summary = document.getElementById('timeline-summary');
+            const list = document.getElementById('timeline-list');
+
+            const sortedLocations = [...currentLocations].reverse();
+
+            deviceName.textContent = `${getDeviceIcon()} Timeline`;
+
+            summary.innerHTML = `<span>${sortedLocations.length}</span> data points in selected time range`;
+
+            list.innerHTML = sortedLocations.map((loc, index) => {
+                const isLatest = index === 0;
+                const isActive = selectedLocationId === loc.id;
+                const date = new Date(loc.timestamp);
+                const timeStr = date.toLocaleTimeString();
+                const dateStr = date.toLocaleDateString();
+
+                let accuracyStr = '';
+                if (loc.horizontal_accuracy) {
+                    accuracyStr = loc.horizontal_accuracy.toFixed(0) + 'm';
+                }
+
+                const confidenceStr = loc.confidence != null ? `Confidence ${loc.confidence}/3` : '';
+
+                return `
+                    <div class="timeline-item ${isLatest ? 'latest' : ''} ${isActive ? 'active' : ''}"
+                         data-id="${loc.id}"
+                         data-lat="${loc.latitude}"
+                         data-lng="${loc.longitude}">
+                        <div class="timeline-dot"></div>
+                        <div class="timeline-content">
+                            <div class="timeline-time">${timeStr}</div>
+                            <div class="timeline-details">
+                                <span>${dateStr}</span>
+                                <span>${confidenceStr}</span>
+                                <span>${accuracyStr}</span>
+                            </div>
+                        </div>
+                        ${loc.battery_status ? `<div class="timeline-battery">${formatBattery(loc.battery_status)}</div>` : ''}
+                    </div>
+                `;
+            }).join('');
+
+            list.querySelectorAll('.timeline-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const id = parseInt(item.dataset.id);
+                    const lat = parseFloat(item.dataset.lat);
+                    const lng = parseFloat(item.dataset.lng);
+
+                    selectedLocationId = id;
+                    list.querySelectorAll('.timeline-item').forEach(i => i.classList.remove('active'));
+                    item.classList.add('active');
+
+                    map.setView([lat, lng], 16);
+                    if (markersById[id]) {
+                        markersById[id].openPopup();
+                    }
+                });
+            });
+
+            panel.classList.add('visible');
+        }
+
+        function hideTimelinePanel() {
+            document.getElementById('timeline-panel').classList.remove('visible');
+        }
+
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            loadDevices();
+            loadLocations();
+            loadStats();
+        });
+
+        document.getElementById('time-range').addEventListener('change', loadLocations);
+
+        document.getElementById('timeline-close').addEventListener('click', () => {
+            selectedDevice = null;
+            selectedLocationId = null;
+            hideTimelinePanel();
+            loadDevices();
+            loadLocations();
+        });
+
+        loadDevices();
+        loadLocations();
+        loadStats();
+
+        setInterval(() => {
+            loadDevices();
+            loadLocations();
+            loadStats();
+        }, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
