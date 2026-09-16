@@ -73,6 +73,38 @@ class TestLocationDatabase(unittest.TestCase):
 
         self.assertEqual(len(self.db.get_locations(limit=2)), 2)
 
+    def test_get_locations_respects_start_time(self):
+        self.db.upsert_device("tag-1", "Backpack")
+        now = datetime.now()
+        old_time = now - timedelta(hours=2)
+        mid_time = now - timedelta(hours=1)
+        new_time = now
+
+        self.db.record_location("tag-1", 1.0, 1.0, old_time)
+        self.db.record_location("tag-1", 2.0, 2.0, mid_time)
+        self.db.record_location("tag-1", 3.0, 3.0, new_time)
+
+        # Query with start_time should exclude older locations
+        locations = self.db.get_locations(device_id="tag-1", start_time=mid_time)
+        self.assertEqual(len(locations), 2)
+        self.assertIn(mid_time.timestamp(), [datetime.fromisoformat(loc["timestamp"].replace(" ", "T")).timestamp() for loc in locations])
+
+    def test_get_locations_respects_end_time(self):
+        self.db.upsert_device("tag-1", "Backpack")
+        now = datetime.now()
+        old_time = now - timedelta(hours=2)
+        mid_time = now - timedelta(hours=1)
+        new_time = now
+
+        self.db.record_location("tag-1", 1.0, 1.0, old_time)
+        self.db.record_location("tag-1", 2.0, 2.0, mid_time)
+        self.db.record_location("tag-1", 3.0, 3.0, new_time)
+
+        # Query with end_time should exclude newer locations
+        locations = self.db.get_locations(device_id="tag-1", end_time=mid_time)
+        self.assertEqual(len(locations), 2)
+        self.assertIn(mid_time.timestamp(), [datetime.fromisoformat(loc["timestamp"].replace(" ", "T")).timestamp() for loc in locations])
+
 
 if __name__ == "__main__":
     unittest.main()

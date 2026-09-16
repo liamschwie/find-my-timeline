@@ -108,7 +108,7 @@ class LocationDatabase:
                     horizontal_accuracy,
                     confidence,
                     battery_status,
-                    timestamp,
+                    timestamp.isoformat(sep=" "),
                 ),
             )
             return cursor.lastrowid
@@ -138,11 +138,11 @@ class LocationDatabase:
 
         if start_time:
             query += " AND timestamp >= ?"
-            params.append(start_time)
+            params.append(start_time.isoformat(sep=" "))
 
         if end_time:
             query += " AND timestamp <= ?"
-            params.append(end_time)
+            params.append(end_time.isoformat(sep=" "))
 
         query += " ORDER BY timestamp DESC"
 
