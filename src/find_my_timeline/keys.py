@@ -16,6 +16,7 @@ SEARCH_PATHS = [
     Path.home() / "Library/com.apple.icloud.searchpartyd",
 ]
 KEYS_DIR = Path.home() / ".find-my-timeline" / "keys"
+IMPORTABLE_SUFFIXES = {".json", ".plist", ".record"}
 
 
 def find_search_path(candidates: list[Path] | None = None) -> Path | None:
@@ -32,8 +33,9 @@ def _safe_filename(name: str) -> str:
 
 def _write(accessories: list[FindMyAccessory], dest_dir: Path) -> list[Path]:
     """Write accessories as JSON key files, one per accessory, mode 0600."""
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_dir.chmod(0o700)
+    if not dest_dir.exists():
+        dest_dir.mkdir(parents=True)
+        dest_dir.chmod(0o700)
 
     written = []
     for accessory in accessories:
@@ -72,12 +74,16 @@ def import_from(source: Path, dest_dir: Path = KEYS_DIR) -> list[Path]:
     exported on another Mac or by a tool like OpenTagViewer and copied over.
     """
     paths = sorted(source.iterdir()) if source.is_dir() else [source]
+    if not any(p.suffix in IMPORTABLE_SUFFIXES for p in paths):
+        raise ValueError(
+            f"no {', '.join(sorted(IMPORTABLE_SUFFIXES))} files in {source}"
+        )
 
     accessories = []
     for path in paths:
         if path.suffix == ".json":
             accessories.append(FindMyAccessory.from_json(path))
-        elif path.suffix in (".plist", ".record"):
+        elif path.suffix in IMPORTABLE_SUFFIXES:
             try:
                 accessories.append(FindMyAccessory.from_plist(path))
             except TypeError as exc:  # a list plist is still-encrypted ciphertext

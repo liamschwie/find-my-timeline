@@ -118,6 +118,16 @@ class TestImportFrom(unittest.TestCase):
 
         self.assertEqual([p.stem for p in written], ["Backpack", "Keys"])
 
+    def test_no_importable_files_raises(self):
+        source = self.root / "exported"
+        source.mkdir()
+        (source / "notes.txt").write_text("nothing importable here")
+
+        with self.assertRaises(ValueError) as ctx:
+            keys.import_from(source, self.dst_path)
+
+        self.assertIn(".json", str(ctx.exception))
+
     def test_imports_single_decrypted_plist(self):
         source = self.root / "tag.plist"
         source.write_bytes(b"plist")
