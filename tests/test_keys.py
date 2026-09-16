@@ -66,6 +66,46 @@ class TestExportKeys(unittest.TestCase):
         self.assertNotIn("/", written[0].name)
         self.assertNotIn(":", written[0].name)
 
+    def test_export_keys_sets_0600_permission(self):
+        (self.src_path / "A.record").write_bytes(b"fake plist")
+
+        with mock.patch.object(
+            keys.FindMyAccessory,
+            "from_plist",
+            return_value=FakeAccessory("Backpack"),
+        ):
+            written = keys.export_keys(self.src_path, self.dst_path)
+
+        self.assertEqual(len(written), 1)
+        perms = oct(written[0].stat().st_mode)[-3:]
+        self.assertEqual(perms, "600")
+
+    def test_load_keys_empty_directory(self):
+        result = keys.load_keys(self.dst_path)
+        self.assertEqual(result, [])
+
+    def test_load_keys_round_trip(self):
+        (self.src_path / "A.record").write_bytes(b"fake plist")
+        (self.src_path / "B.record").write_bytes(b"fake plist")
+
+        with mock.patch.object(
+            keys.FindMyAccessory,
+            "from_plist",
+            side_effect=[FakeAccessory("Backpack"), FakeAccessory("Keys")],
+        ):
+            written = keys.export_keys(self.src_path, self.dst_path)
+
+        with mock.patch.object(
+            keys.FindMyAccessory,
+            "from_json",
+            side_effect=[FakeAccessory("Backpack"), FakeAccessory("Keys")],
+        ):
+            loaded = keys.load_keys(self.dst_path)
+
+        self.assertEqual(len(loaded), 2)
+        self.assertEqual(loaded[0].name, "Backpack")
+        self.assertEqual(loaded[1].name, "Keys")
+
 
 if __name__ == "__main__":
     unittest.main()
