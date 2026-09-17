@@ -9,3 +9,4 @@ data/
 .env
 account.json
 ani_libs.bin
+.claude/
