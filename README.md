@@ -29,7 +29,7 @@ AirTag was set up. This tool:
 ## Setup
 
 ```bash
-git clone <this repo>
+git clone https://github.com/liamschwie/find-my-timeline
 cd find-my-timeline
 python3 -m venv .venv
 .venv/bin/pip install -e .
